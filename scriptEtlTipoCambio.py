@@ -12,6 +12,7 @@ CONNECTION_STRING = (
     r"SERVER=localhost;"
     r"DATABASE=DW_Sales;"
     r"Trusted_Connection=yes;"
+    r"TrustServerCertificate=yes;"
 )
 
 # ========================
