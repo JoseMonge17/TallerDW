@@ -8,7 +8,7 @@ from datetime import datetime
 EXCEL_PATH = r"D:\VsCode\TallerDW\TipoCambioUSD.xlsx"  # Ruta del archivo Excel
 SHEET_NAME = "Sheet1"  # Nombre de la hoja
 CONNECTION_STRING = (
-    r"DRIVER={ODBC Driver 18 for SQL Server};"
+    r"DRIVER={ODBC Driver 17 for SQL Server};"
     r"SERVER=localhost;"
     r"DATABASE=DW_Sales;"
     r"Trusted_Connection=yes;"
