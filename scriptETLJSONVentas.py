@@ -117,6 +117,17 @@ for _, row in valid_rows.iterrows():
 
     cursor.execute("SELECT idProduct FROM dbo.DIM_Product WHERE itemCode = ?", item_code)
     prod_row = cursor.fetchone()
+
+    if not prod_row:
+        cursor.execute("""
+            INSERT INTO dbo.DIM_Product (itemCode, itemName, brand, onHand, avgPrice, cardCode, whsCode, whsName)
+            VALUES (?, ?, 'Desconocido', 0, ?, 'DUMMY', 'WH01', 'Warehouse JSON')
+        """, item_code, f"Producto {item_code}", float(row["precio"]))
+        conn.commit()
+
+        cursor.execute("SELECT idProduct FROM dbo.DIM_Product WHERE itemCode = ?", item_code)
+        prod_row = cursor.fetchone()
+
     idProduct = prod_row[0]
 
     cursor.execute("""
