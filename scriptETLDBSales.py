@@ -5,7 +5,8 @@ from datetime import datetime
 # ========================
 # CONFIGURACIÓN
 # ========================
-CONNECTION_STRING_DB = "mssql+pyodbc://localhost/DB_Sales2?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server"
+#CONNECTION_STRING_DB = "mssql+pyodbc://localhost/DB_Sales2?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server" #Configuracion Carlos
+CONNECTION_STRING_DB = "mssql+pyodbc://localhost/DB_SALES?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server" #Configuracion JJ
 CONNECTION_STRING_DW = "mssql+pyodbc://localhost/DW_Sales?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server"
 
 
@@ -231,7 +232,7 @@ def main():
     
     try:
         # 1. Actualizar fechas a 2024
-        update_dates_to_2024()
+        #update_dates_to_2024()
         
         # 2. Cargar dimensiones
         etl_dim_customer()
