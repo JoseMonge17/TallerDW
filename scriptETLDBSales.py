@@ -5,9 +5,6 @@ from datetime import datetime
 # ========================
 # CONFIGURACIÓN
 # ========================
-# ========================
-# CONFIGURACIÓN
-# ========================
 CONNECTION_STRING_DB = "mssql+pyodbc://localhost/DB_Sales2?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server"
 CONNECTION_STRING_DW = "mssql+pyodbc://localhost/DW_Sales?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server"
 
