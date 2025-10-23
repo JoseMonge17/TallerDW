@@ -163,24 +163,27 @@ def etl_fact_sales():
         df_customers_map = read_sql_to_dataframe(engine_dw, "SELECT idCustomer, cardCode FROM DIM_Customer")
         df_products_map = read_sql_to_dataframe(engine_dw, "SELECT idProduct, itemCode FROM DIM_Product")
         df_salespersons_map = read_sql_to_dataframe(engine_dw, "SELECT idSalesPerson, slpCode FROM DIM_SalesPerson")
-        df_time_map = read_sql_to_dataframe(engine_dw, "SELECT idTime, date FROM DIM_Time")
+        df_time_map = read_sql_to_dataframe(engine_dw, "SELECT idTime, date, tipoCambio FROM DIM_Time")
 
         customers_dict = dict(zip(df_customers_map['cardCode'], df_customers_map['idCustomer']))
         products_dict = dict(zip(df_products_map['itemCode'], df_products_map['idProduct']))
         salespersons_dict = dict(zip(df_salespersons_map['slpCode'], df_salespersons_map['idSalesPerson']))
         time_dict = dict(zip(df_time_map['date'], df_time_map['idTime']))
+        tipo_cambio_dict = dict(zip(df_time_map['date'], df_time_map['tipoCambio']))
 
         # Facturas (OINV) y Notas de crédito (ORIN)
         df_invoices = read_sql_to_dataframe(engine_db, """
-            SELECT i.DocEntry, i.DocDate, i.CardCode, i.SlpCode, i.DocTotal, i.DocTotalFC,
-                    d.ItemCode, d.Quantity, d.Price, d.LineTotal
-            FROM OINV i INNER JOIN INV1 d ON i.DocEntry = d.DocEntry
+            SELECT i.DocEntry, i.DocDate, i.CardCode, i.SlpCode,
+                   d.ItemCode, d.Quantity, d.Price
+            FROM OINV i
+            INNER JOIN INV1 d ON i.DocEntry = d.DocEntry
         """)
 
         df_credit_notes = read_sql_to_dataframe(engine_db, """
-            SELECT r.DocEntry, r.DocDate, r.CardCode, r.SlpCode, r.DocTotal, r.DocTotalFC,
-                    d.ItemCode, d.Quantity, d.Price, d.LineTotal
-            FROM ORIN r INNER JOIN RIN1 d ON r.DocEntry = d.DocEntry
+            SELECT r.DocEntry, r.DocDate, r.CardCode, r.SlpCode,
+                   d.ItemCode, d.Quantity, d.Price
+            FROM ORIN r
+            INNER JOIN RIN1 d ON r.DocEntry = d.DocEntry
         """)
 
         # Combinar facturas y notas con multiplicador
@@ -189,23 +192,14 @@ def etl_fact_sales():
             df_credit_notes.assign(multiplier=-1)
         ])
 
-        # Aplicar multiplicador para restar notas de crédito
+        # Aplicar multiplicador (restar notas de crédito)
         df_sales['Quantity'] *= df_sales['multiplier']
-        df_sales['LineTotal'] *= df_sales['multiplier']
-        df_sales['DocTotal'] *= df_sales['multiplier']
-        df_sales['DocTotalFC'] *= df_sales['multiplier']
+        df_sales['Price'] = df_sales['Price']  # sigue en dólares
+        df_sales['tipoCambio'] = df_sales['DocDate'].map(tipo_cambio_dict)
 
-        # Agrupar por producto y cliente para restar cantidades
-        df_sales = df_sales.groupby(
-            ['DocDate', 'CardCode', 'SlpCode', 'ItemCode'],
-            as_index=False
-        ).agg({
-            'Quantity': 'sum',
-            'Price': 'mean',
-            'LineTotal': 'sum',
-            'DocTotal': 'sum',
-            'DocTotalFC': 'sum'
-        })
+        # Calcular totales por línea
+        df_sales['DocTotal'] = df_sales['Quantity'] * df_sales['Price'] * df_sales['tipoCambio']   # colones
+        df_sales['DocTotalFC'] = df_sales['Quantity'] * df_sales['Price']                          # dólares
 
         # Eliminar registros con cantidad cero
         df_sales = df_sales[df_sales['Quantity'] != 0]
@@ -221,7 +215,7 @@ def etl_fact_sales():
 
         # Formato final
         df_final = df_sales[['idTime', 'idCustomer', 'idProduct', 'idSalesPerson',
-                                'Quantity', 'Price', 'DocTotal', 'DocTotalFC']].rename(columns={
+                             'Quantity', 'Price', 'DocTotal', 'DocTotalFC']].rename(columns={
             'Quantity': 'quantity',
             'Price': 'price',
             'DocTotal': 'docTotal',
@@ -232,10 +226,10 @@ def etl_fact_sales():
         execute_sql(engine_dw, "DELETE FROM FACT_Sales")
         df_final.to_sql('FACT_Sales', engine_dw, if_exists='append', index=False)
 
-        print(f"FACT_Sales cargado: {len(df_final)} registros")
+        print(f"✓ FACT_Sales cargado: {len(df_final)} registros")
         return df_final
     except Exception as e:
-        print(f"Error en ETL FACT_Sales: {e}")
+        print(f"✗ Error en ETL FACT_Sales: {e}")
         return None
 
 # ========================
