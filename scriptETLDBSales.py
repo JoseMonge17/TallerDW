@@ -169,40 +169,33 @@ def etl_fact_sales():
         products_dict = dict(zip(df_products_map['itemCode'], df_products_map['idProduct']))
         salespersons_dict = dict(zip(df_salespersons_map['slpCode'], df_salespersons_map['idSalesPerson']))
         time_dict = dict(zip(df_time_map['date'], df_time_map['idTime']))
-        tipo_cambio_dict = dict(zip(df_time_map['date'], df_time_map['tipoCambio']))
+        cambio_dict = dict(zip(df_time_map['date'], df_time_map['tipoCambio']))
 
         # Facturas (OINV) y Notas de crédito (ORIN)
         df_invoices = read_sql_to_dataframe(engine_db, """
-            SELECT i.DocEntry, i.DocDate, i.CardCode, i.SlpCode,
-                   d.ItemCode, d.Quantity, d.Price
-            FROM OINV i
-            INNER JOIN INV1 d ON i.DocEntry = d.DocEntry
+            SELECT i.DocEntry, i.DocDate, i.CardCode, i.SlpCode, i.DocTotal, i.DocTotalFC,
+                    d.ItemCode, d.Quantity, d.Price, d.LineTotal
+            FROM OINV i INNER JOIN INV1 d ON i.DocEntry = d.DocEntry
         """)
 
         df_credit_notes = read_sql_to_dataframe(engine_db, """
-            SELECT r.DocEntry, r.DocDate, r.CardCode, r.SlpCode,
-                   d.ItemCode, d.Quantity, d.Price
-            FROM ORIN r
-            INNER JOIN RIN1 d ON r.DocEntry = d.DocEntry
+            SELECT r.DocEntry, r.DocDate, r.CardCode, r.SlpCode, r.DocTotal, r.DocTotalFC,
+                    d.ItemCode, d.Quantity, d.Price, d.LineTotal
+            FROM ORIN r INNER JOIN RIN1 d ON r.DocEntry = d.DocEntry
         """)
 
-        # Combinar facturas y notas con multiplicador
-        df_sales = pd.concat([
-            df_invoices.assign(multiplier=1),
-            df_credit_notes.assign(multiplier=-1)
-        ])
+        # Crear los registros de las facturas
+        df_invoices['multiplier'] = 1  # Para las facturas, multiplicamos por 1
+        df_credit_notes['multiplier'] = -1  # Para las notas de crédito, multiplicamos por -1
 
-        # Aplicar multiplicador (restar notas de crédito)
+        # Combinar facturas y notas de crédito
+        df_sales = pd.concat([df_invoices, df_credit_notes])
+
+        # Aplicar el multiplicador a las cantidades, LineTotal, DocTotal, DocTotalFC
         df_sales['Quantity'] *= df_sales['multiplier']
-        df_sales['Price'] = df_sales['Price']  # sigue en dólares
-        df_sales['tipoCambio'] = df_sales['DocDate'].map(tipo_cambio_dict)
-
-        # Calcular totales por línea
-        df_sales['DocTotal'] = df_sales['Quantity'] * df_sales['Price'] * df_sales['tipoCambio']   # colones
-        df_sales['DocTotalFC'] = df_sales['Quantity'] * df_sales['Price']                          # dólares
-
-        # Eliminar registros con cantidad cero
-        df_sales = df_sales[df_sales['Quantity'] != 0]
+        df_sales['LineTotal'] *= df_sales['multiplier']
+        df_sales['DocTotal'] *= df_sales['multiplier']
+        df_sales['DocTotalFC'] *= df_sales['multiplier']
 
         # Mapear IDs
         df_sales['idCustomer'] = df_sales['CardCode'].map(customers_dict)
@@ -213,24 +206,39 @@ def etl_fact_sales():
         # Eliminar filas sin mapeo válido
         df_sales = df_sales.dropna(subset=['idCustomer', 'idProduct', 'idSalesPerson', 'idTime'])
 
+        # Mapear tipo de cambio
+        df_sales['tipoCambio'] = df_sales['DocDate'].map(cambio_dict)
+
+        # Calcular docTotal y docTotalFC
+        df_sales['docTotal'] = df_sales['LineTotal'] * df_sales['tipoCambio']
+        df_sales['docTotalFC'] = df_sales['Quantity'] * df_sales['Price']
+
+        # Ordenar por DocEntry
+        df_sales = df_sales.sort_values(by='DocEntry', ascending=True)
+
         # Formato final
         df_final = df_sales[['idTime', 'idCustomer', 'idProduct', 'idSalesPerson',
-                             'Quantity', 'Price', 'DocTotal', 'DocTotalFC']].rename(columns={
+                             'Quantity', 'Price', 'docTotal', 'docTotalFC']].rename(columns={
             'Quantity': 'quantity',
             'Price': 'price',
-            'DocTotal': 'docTotal',
-            'DocTotalFC': 'doctTotalFC'
+            'docTotal': 'docTotal',
+            'docTotalFC': 'doctTotalFC'
         })
 
         # Limpiar e insertar
         execute_sql(engine_dw, "DELETE FROM FACT_Sales")
         df_final.to_sql('FACT_Sales', engine_dw, if_exists='append', index=False)
 
-        print(f"✓ FACT_Sales cargado: {len(df_final)} registros")
+        print(f"FACT_Sales cargado: {len(df_final)} registros")
         return df_final
     except Exception as e:
-        print(f"✗ Error en ETL FACT_Sales: {e}")
+        print(f"Error en ETL FACT_Sales: {e}")
         return None
+
+
+
+
+
 
 # ========================
 # FUNCIÓN PRINCIPAL
@@ -247,9 +255,9 @@ def main():
         #update_dates_to_2024()
         
         # 2. Cargar dimensiones
-        etl_dim_customer()
-        etl_dim_product()
-        etl_dim_salesperson()
+        #etl_dim_customer()
+        #etl_dim_product()
+        #etl_dim_salesperson()
         
         # 3. Cargar hechos
         etl_fact_sales()
