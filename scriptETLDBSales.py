@@ -159,65 +159,83 @@ def etl_fact_sales():
         engine_db = get_engine(CONNECTION_STRING_DB)
         engine_dw = get_engine(CONNECTION_STRING_DW)
 
-        # Obtener mapeos de IDs del DW
+        # Mapeos de IDs
         df_customers_map = read_sql_to_dataframe(engine_dw, "SELECT idCustomer, cardCode FROM DIM_Customer")
         df_products_map = read_sql_to_dataframe(engine_dw, "SELECT idProduct, itemCode FROM DIM_Product")
         df_salespersons_map = read_sql_to_dataframe(engine_dw, "SELECT idSalesPerson, slpCode FROM DIM_SalesPerson")
         df_time_map = read_sql_to_dataframe(engine_dw, "SELECT idTime, date FROM DIM_Time")
-        
-        # Convertir a diccionarios
+
         customers_dict = dict(zip(df_customers_map['cardCode'], df_customers_map['idCustomer']))
         products_dict = dict(zip(df_products_map['itemCode'], df_products_map['idProduct']))
         salespersons_dict = dict(zip(df_salespersons_map['slpCode'], df_salespersons_map['idSalesPerson']))
         time_dict = dict(zip(df_time_map['date'], df_time_map['idTime']))
-        
-        # Leer facturas y notas de crédito
+
+        # Facturas (OINV) y Notas de crédito (ORIN)
         df_invoices = read_sql_to_dataframe(engine_db, """
             SELECT i.DocEntry, i.DocDate, i.CardCode, i.SlpCode, i.DocTotal, i.DocTotalFC,
-                   d.ItemCode, d.Quantity, d.Price, d.LineTotal
+                    d.ItemCode, d.Quantity, d.Price, d.LineTotal
             FROM OINV i INNER JOIN INV1 d ON i.DocEntry = d.DocEntry
         """)
-        
+
         df_credit_notes = read_sql_to_dataframe(engine_db, """
             SELECT r.DocEntry, r.DocDate, r.CardCode, r.SlpCode, r.DocTotal, r.DocTotalFC,
-                   d.ItemCode, d.Quantity, d.Price, d.LineTotal
+                    d.ItemCode, d.Quantity, d.Price, d.LineTotal
             FROM ORIN r INNER JOIN RIN1 d ON r.DocEntry = d.DocEntry
         """)
-        
-        # Combinar y transformar
+
+        # Combinar facturas y notas con multiplicador
         df_sales = pd.concat([
             df_invoices.assign(multiplier=1),
             df_credit_notes.assign(multiplier=-1)
         ])
-        
-        # Aplicar multiplicador
-        df_sales['Quantity'] = df_sales['Quantity'] * df_sales['multiplier']
-        df_sales['LineTotal'] = df_sales['LineTotal'] * df_sales['multiplier']
-        df_sales['DocTotal'] = df_sales['DocTotal'] * df_sales['multiplier']
-        df_sales['DocTotalFC'] = df_sales['DocTotalFC'] * df_sales['multiplier']
-        
+
+        # Aplicar multiplicador para restar notas de crédito
+        df_sales['Quantity'] *= df_sales['multiplier']
+        df_sales['LineTotal'] *= df_sales['multiplier']
+        df_sales['DocTotal'] *= df_sales['multiplier']
+        df_sales['DocTotalFC'] *= df_sales['multiplier']
+
+        # Agrupar por producto y cliente para restar cantidades
+        df_sales = df_sales.groupby(
+            ['DocDate', 'CardCode', 'SlpCode', 'ItemCode'],
+            as_index=False
+        ).agg({
+            'Quantity': 'sum',
+            'Price': 'mean',
+            'LineTotal': 'sum',
+            'DocTotal': 'sum',
+            'DocTotalFC': 'sum'
+        })
+
+        # Eliminar registros con cantidad cero
+        df_sales = df_sales[df_sales['Quantity'] != 0]
+
         # Mapear IDs
         df_sales['idCustomer'] = df_sales['CardCode'].map(customers_dict)
         df_sales['idProduct'] = df_sales['ItemCode'].map(products_dict)
         df_sales['idSalesPerson'] = df_sales['SlpCode'].map(salespersons_dict)
         df_sales['idTime'] = df_sales['DocDate'].map(time_dict)
 
-        # Limpiar y preparar datos
+        # Eliminar filas sin mapeo válido
         df_sales = df_sales.dropna(subset=['idCustomer', 'idProduct', 'idSalesPerson', 'idTime'])
-        df_final = df_sales[['idTime', 'idCustomer', 'idProduct', 'idSalesPerson', 
-                           'Quantity', 'Price', 'DocTotal', 'DocTotalFC']].rename(columns={
-            'Quantity': 'quantity', 'Price': 'price', 'DocTotal': 'docTotal', 'DocTotalFC': 'doctTotalFC'
+
+        # Formato final
+        df_final = df_sales[['idTime', 'idCustomer', 'idProduct', 'idSalesPerson',
+                                'Quantity', 'Price', 'DocTotal', 'DocTotalFC']].rename(columns={
+            'Quantity': 'quantity',
+            'Price': 'price',
+            'DocTotal': 'docTotal',
+            'DocTotalFC': 'doctTotalFC'
         })
-        
-        # Insertar en DW
+
+        # Limpiar e insertar
         execute_sql(engine_dw, "DELETE FROM FACT_Sales")
         df_final.to_sql('FACT_Sales', engine_dw, if_exists='append', index=False)
-        
-        print(f"✓ FACT_Sales cargado: {len(df_final)} registros")
+
+        print(f"FACT_Sales cargado: {len(df_final)} registros")
         return df_final
-        
     except Exception as e:
-        print(f"✗ Error en ETL FACT_Sales: {e}")
+        print(f"Error en ETL FACT_Sales: {e}")
         return None
 
 # ========================
