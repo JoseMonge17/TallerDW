@@ -6,8 +6,7 @@ from datetime import datetime
 # ========================
 # CONFIGURACIÓN
 # ========================
-#JSON_PATH = r"C:\Users\djmon\OneDrive\Documentos\DW_Dummy\ventas_resumen_2024_2025.json" #Configuracion Monte
-JSON_PATH = r"E:\BD2\DW\TallerDW\ventas_resumen_2024_2025.json"
+JSON_PATH = r"C:\Users\djmon\OneDrive\Documentos\DW_Dummy\ventas_resumen_2024_2025.json"
 CONNECTION_STRING = (
     r"DRIVER={ODBC Driver 17 for SQL Server};"
     r"SERVER=localhost;"
@@ -45,11 +44,8 @@ print(f"{len(df)} registros cargados desde el JSON.")
 print("Transformando datos...")
 
 df["MontoTotalUSD"] = df["cantidad"].astype(float) * df["precio"].astype(float)
-
-# Crear fecha representativa (día 1 de cada mes)
 df["fecha_limpia"] = pd.to_datetime(df["anio"].astype(str) + "-" + df["mes"].astype(str) + "-01")
 
-# Validar datos
 valid_rows = df.dropna(subset=["itemCode", "cantidad", "precio", "MontoTotalUSD"])
 invalid_rows = df[df.isna().any(axis=1)]
 print(f"Filas válidas: {len(valid_rows)} | Filas inválidas: {len(invalid_rows)}")
@@ -109,13 +105,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 # PROCESAR FILAS
 # ========================
 print("Insertando datos en FACT_Sales...")
-
 filas_insertadas = 0
 
 for _, row in valid_rows.iterrows():
     item_code = row["itemCode"]
     fecha = row["fecha_limpia"]
 
+    # -- Verificar si existe el producto
     cursor.execute("SELECT idProduct FROM dbo.DIM_Product WHERE itemCode = ?", item_code)
     prod_row = cursor.fetchone()
 
@@ -131,23 +127,30 @@ for _, row in valid_rows.iterrows():
 
     idProduct = prod_row[0]
 
+    # -- Obtener idTime y tipo de cambio
     cursor.execute("""
-        SELECT TOP 1 idTime FROM dbo.DIM_Time
+        SELECT TOP 1 idTime, tipoCambio FROM dbo.DIM_Time
         WHERE YEAR([date]) = ? AND MONTH([date]) = ?
     """, fecha.year, fecha.month)
     time_row = cursor.fetchone()
     if not time_row:
         print(f"Fecha {fecha.strftime('%Y-%m')} no encontrada en DIM_Time. Saltando fila.")
         continue
-    idTime = time_row[0]
 
+    idTime = time_row[0]
+    tipo_cambio = float(time_row[1])
+
+    # ========================
+    # Calcular montos finales
+    # ========================
     cantidad = int(row["cantidad"])
-    precio = float(row["precio"])
-    monto_total = float(row["MontoTotalUSD"])
+    precio_usd = float(row["precio"])
+    doc_total_fc = float(row["MontoTotalUSD"])         # USD
+    doc_total_crc = doc_total_fc * tipo_cambio         # Convertido a colones
 
     cursor.execute(insert_query, (
         idTime, idCustomer, idProduct, idSalesPerson,
-        cantidad, precio, monto_total, monto_total
+        cantidad, precio_usd, doc_total_crc, doc_total_fc
     ))
     filas_insertadas += 1
 
