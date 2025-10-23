@@ -8,6 +8,7 @@ from datetime import datetime
 # ========================
 #JSON_PATH = r"C:\Users\djmon\OneDrive\Documentos\DW_Dummy\ventas_resumen_2024_2025.json" #Ruta de monte de la rosa
 JSON_PATH = r"D:\VsCode\TallerDW\ventas_resumen_2024_2025.json" #Ruta de Aguero
+JSON_PATH = r"E:\BD2\DW\TallerDW\ventas_resumen_2024_2025.json" #Ruta de JJ
 
 CONNECTION_STRING = (
     r"DRIVER={ODBC Driver 17 for SQL Server};"

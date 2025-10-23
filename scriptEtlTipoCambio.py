@@ -5,8 +5,8 @@ from datetime import datetime
 # ========================
 # CONFIGURACIÓN
 # ========================
-EXCEL_PATH = r"D:\VsCode\TallerDW\TipoCambioUSD.xlsx"  # Ruta del archivo Excel Aguero
-#EXCEL_PATH = r"E:\BD2\DW\TallerDW\TipoCambioUSD.xlsx"
+#EXCEL_PATH = r"D:\VsCode\TallerDW\TipoCambioUSD.xlsx"  # Ruta del archivo Excel Aguero
+EXCEL_PATH = r"E:\BD2\DW\TallerDW\TipoCambioUSD.xlsx"   # Ruta del archivo Excel JJ
 
 SHEET_NAME = "Sheet1"  # Nombre de la hoja
 CONNECTION_STRING = (
