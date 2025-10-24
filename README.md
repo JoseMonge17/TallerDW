@@ -13,3 +13,4 @@ Para probar todos los ETL se necesita ejecutar en consolar:
 pip install pandas
 pip install sqlalchemy
 pip install openpyxl
+pip install pyodbc

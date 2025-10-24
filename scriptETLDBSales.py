@@ -252,9 +252,9 @@ def main():
         #update_dates_to_2024()
         
         # 2. Cargar dimensiones
-        #etl_dim_customer()
-        #etl_dim_product()
-        #etl_dim_salesperson()
+        etl_dim_customer()
+        etl_dim_product()
+        etl_dim_salesperson()
         
         # 3. Cargar hechos
         etl_fact_sales()
