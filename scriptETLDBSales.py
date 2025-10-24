@@ -208,10 +208,12 @@ def etl_fact_sales():
 
         # Mapear tipo de cambio
         df_sales['tipoCambio'] = df_sales['DocDate'].map(cambio_dict)
-
-        # Calcular docTotal y docTotalFC
-        df_sales['docTotal'] = df_sales['LineTotal'] * df_sales['tipoCambio']
+        
+        # Calcular docTotalFC (sin cambios, ya que es la cantidad en dólares)
         df_sales['docTotalFC'] = df_sales['Quantity'] * df_sales['Price']
+        
+        # Calcular docTotal en colones (Multiplicando docTotalFC por tipoCambio)
+        df_sales['docTotal'] = df_sales['Quantity'] * df_sales['Price'] * df_sales['tipoCambio']
 
         # Ordenar por DocEntry
         df_sales = df_sales.sort_values(by='DocEntry', ascending=True)
@@ -234,11 +236,6 @@ def etl_fact_sales():
     except Exception as e:
         print(f"Error en ETL FACT_Sales: {e}")
         return None
-
-
-
-
-
 
 # ========================
 # FUNCIÓN PRINCIPAL
